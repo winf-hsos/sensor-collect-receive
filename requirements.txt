@@ -1,0 +1,7 @@
+dotenv
+pubnub
+tinkerforge
+pandas
+streamlit
+streamlit_autorefresh
+altair
