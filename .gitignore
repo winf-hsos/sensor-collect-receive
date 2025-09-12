@@ -1,2 +1,5 @@
 .env
-.python-env
+.python-env/    
+python-env/
+data/
+*.csv

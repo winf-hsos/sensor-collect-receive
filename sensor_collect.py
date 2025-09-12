@@ -6,6 +6,13 @@ import datetime
 from tinkerforge.ip_connection import IPConnection
 from tinkerforge.bricklet_analog_in_v3 import BrickletAnalogInV3
 
+# Read command line argument for UID
+import sys
+if len(sys.argv) > 1:
+    UID = sys.argv[1]   # Use UID from command line argument
+else:
+    UID = os.getenv('TF_UID', 'missing')
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -28,14 +35,14 @@ if PUBLISH:
 # Tinkerforge setup
 HOST = os.getenv('TF_HOST', 'localhost')
 PORT = int(os.getenv('TF_PORT', 4223))
-UID = os.getenv('TF_UID', '27eU')  # Change to your Analog In UID in .env if needed
 
-CSV_FILE = os.getenv('CSV_FILE', 'sensor_data.csv')
+CSV_FILE = os.getenv('CSV_FILE_COLLECTOR', 'sensor_data.csv')
+CSV_FILE_WITH_UID = f"{CSV_FILE.split('.csv')[0]}_{UID}.csv"
 INTERVAL = int(os.getenv('INTERVAL', 5))  # seconds
 
 # Ensure CSV has header
-if not os.path.exists(CSV_FILE):
-    with open(CSV_FILE, mode='w', newline='') as f:
+if not os.path.exists(CSV_FILE_WITH_UID):
+    with open(CSV_FILE_WITH_UID, mode='w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['time', 'value'])
 
@@ -53,7 +60,7 @@ try:
         timestamp = datetime.datetime.now().isoformat()
 
         # Write to CSV
-        with open(CSV_FILE, mode='a', newline='') as f:
+        with open(CSV_FILE_WITH_UID, mode='a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([timestamp, mV])
 
