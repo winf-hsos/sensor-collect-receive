@@ -13,16 +13,23 @@ from tinkerforge.bricklet_analog_in_v3 import BrickletAnalogInV3
 load_dotenv()
 
 parser = argparse.ArgumentParser(description="Read AnalogInV3 voltage and (optionally) convert to pH from two-point calibration.")
-parser.add_argument("uid", nargs="?", default=os.getenv("TF_UID", "missing"),
-                    help="Tinkerforge Bricklet UID (positional). Defaults to TF_UID from .env.")
+
+parser.add_argument("--uid", type=str, default=None,
+                    help="Tinkerforge Bricklet UID. Must be provided!",
+                    required=True)
+
 parser.add_argument("--v_low_mv", type=float, default=None,
                     help="Voltage in mV at the lower pH calibration point (e.g., 1800).")
+
 parser.add_argument("--v_high_mv", type=float, default=None,
                     help="Voltage in mV at the higher pH calibration point (e.g., 1200).")
+
 parser.add_argument("--ph_low", type=float, default=None,
                     help="Lower pH calibration value (e.g., 4.00).")
+
 parser.add_argument("--ph_high", type=float, default=None,
                     help="Higher pH calibration value (e.g., 7.00).")
+
 args = parser.parse_args()
 
 UID = args.uid
