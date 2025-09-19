@@ -121,36 +121,58 @@ def load_and_prepare(path: Path) -> pd.DataFrame | None:
         st.warning(f"File '{path}' not found.")
         return None
     try:
-        # Read as-is; avoid relying only on parse_dates
-        df = pd.read_csv(path)
-
-        # Normalize column names (strip spaces)
+        # Read as strings first so we can inspect exact contents
+        df = pd.read_csv(path, dtype=str, keep_default_na=False, on_bad_lines="skip")
         df.columns = [c.strip() for c in df.columns]
 
-        # Ensure required columns
         if "time" not in df.columns or "value" not in df.columns:
             st.error(f"CSV '{path}' must contain 'time' and 'value' columns.")
             return None
 
-        # Robust parsing
-        df["time"] = pd.to_datetime(df["time"], errors="coerce")
-        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        # Parse/conform types
+        time_parsed = pd.to_datetime(df["time"], errors="coerce", utc=False)
+        value_parsed = pd.to_numeric(df["value"], errors="coerce")
+        ph_parsed = pd.to_numeric(df["pH"], errors="coerce") if "pH" in df.columns else None
 
-        if "pH" in df.columns:
-            df["pH"] = pd.to_numeric(df.get("pH"), errors="coerce")
+        # Identify bad-time rows
+        bad_time_mask = time_parsed.isna()
+
+        # If there's exactly one bad row and it's the VERY LAST row -> likely a partial append: drop silently
+        silent_drop = False
+        if bad_time_mask.sum() == 1:
+            bad_idx = bad_time_mask.idxmax()
+            if bad_idx == len(df) - 1:
+                # also check row is blankish (all empty or whitespace)
+                row = df.iloc[bad_idx]
+                if all((str(x).strip() == "") for x in row.values):
+                    silent_drop = True
+
+        df["_time"] = time_parsed
+        df["_value"] = value_parsed
+        if ph_parsed is not None:
+            df["_pH"] = ph_parsed
+
+        # Build cleaned dataframe
+        keep_cols = ["_time", "_value"] + (["_pH"] if "_pH" in df.columns else [])
+        clean = df.loc[:, keep_cols].rename(columns={"_time": "time", "_value": "value", "_pH": "pH"})
 
         # Drop rows with invalid time or value
-        bad_time = df["time"].isna().sum()
-        bad_val = df["value"].isna().sum()
-        if bad_time or bad_val:
-            st.warning(
-                f"'{path.name}': dropped {bad_time} rows with bad time and {bad_val} with non-numeric value."
-            )
-        df = df.dropna(subset=["time", "value"])
+        before = len(clean)
+        clean = clean.dropna(subset=["time", "value"])
+        dropped = before - len(clean)
 
-        # Sort by time after cleaning
-        df = df.sort_values("time").reset_index(drop=True)
-        return df
+        # Only warn if there were nontrivial problems (not just the single trailing blank)
+        if dropped and not silent_drop:
+            bad_rows = df.loc[bad_time_mask, ["time"]].copy()
+            bad_rows.insert(0, "_row_number", bad_rows.index)
+            with st.expander(f"⚠️ '{path.name}': dropped {int(bad_time_mask.sum())} rows with bad time and "
+                             f"{df['value'].isna().sum()} with non-numeric value. Click to inspect."):
+                st.write("First few bad time rows (row index and raw string):")
+                st.dataframe(bad_rows.head(10), use_container_width=True)
+
+        # Finalize
+        clean = clean.sort_values("time").reset_index(drop=True)
+        return clean
 
     except Exception as e:
         st.error(f"Error reading CSV '{path}': {e}")

@@ -102,7 +102,7 @@ try:
     while True:
         # Read value (raw mV)
         mV = analog_in.get_voltage()
-        timestamp = datetime.datetime.now().isoformat()
+        timestamp = datetime.datetime.now().isoformat(timespec='microseconds')
 
         # Transform to pH if possible
         pH_val = transform(mV)
