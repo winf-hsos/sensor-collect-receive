@@ -121,18 +121,44 @@ def load_and_prepare(path: Path) -> pd.DataFrame | None:
         st.warning(f"File '{path}' not found.")
         return None
     try:
-        df = pd.read_csv(path, parse_dates=["time"]).sort_values("time")
-        if "value" not in df.columns:
+        # Read as-is; avoid relying only on parse_dates
+        df = pd.read_csv(path)
+
+        # Normalize column names (strip spaces)
+        df.columns = [c.strip() for c in df.columns]
+
+        # Ensure required columns
+        if "time" not in df.columns or "value" not in df.columns:
             st.error(f"CSV '{path}' must contain 'time' and 'value' columns.")
             return None
+
+        # Robust parsing
+        df["time"] = pd.to_datetime(df["time"], errors="coerce")
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+
         if "pH" in df.columns:
-            df["pH"] = pd.to_numeric(df["pH"], errors="coerce")
+            df["pH"] = pd.to_numeric(df.get("pH"), errors="coerce")
+
+        # Drop rows with invalid time or value
+        bad_time = df["time"].isna().sum()
+        bad_val = df["value"].isna().sum()
+        if bad_time or bad_val:
+            st.warning(
+                f"'{path.name}': dropped {bad_time} rows with bad time and {bad_val} with non-numeric value."
+            )
+        df = df.dropna(subset=["time", "value"])
+
+        # Sort by time after cleaning
+        df = df.sort_values("time").reset_index(drop=True)
         return df
+
     except Exception as e:
         st.error(f"Error reading CSV '{path}': {e}")
         return None
 
+
 def filter_time(df: pd.DataFrame, time_range: str) -> pd.DataFrame:
+    # df['time'] is guaranteed datetime64[ns] after load_and_prepare
     now = pd.Timestamp.now()
     delta_map = {
         "Last 1 minute": pd.Timedelta(minutes=1),
@@ -140,10 +166,11 @@ def filter_time(df: pd.DataFrame, time_range: str) -> pd.DataFrame:
         "Last 20 minutes": pd.Timedelta(minutes=20),
         "Last 1 hour": pd.Timedelta(hours=1),
         "Last 12 hours": pd.Timedelta(hours=12),
-        "Last 1 day": pd.Timedelta(days=1)
+        "Last 1 day": pd.Timedelta(days=1),
     }
     cutoff = now - delta_map.get(time_range, pd.Timedelta(hours=1))
     return df[df["time"] >= cutoff].copy()
+
 
 def y_domain_from_series(series: pd.Series):
     if set_limits and y_min_manual is not None and y_max_manual is not None:
